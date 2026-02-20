@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Patient Zero — Simulation Report</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --green: #00ff41;
+    --dark-green: #003b00;
+    --mid-green: #00a020;
+    --bg: #010c01;
+    --card-bg: #020f02;
+    --border: #00ff4133;
+    --glow: 0 0 20px #00ff4155;
+    --red: #ff4141;
+    --yellow: #ffe041;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--green);
+    font-family: 'Share Tech Mono', monospace;
+    overflow-x: hidden;
+    cursor: crosshair;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px);
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* Matrix rain canvas */
+  #matrix {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    opacity: 0.04;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ---- SLIDES ---- */
+  .slide {
+    display: none;
+    min-height: 100vh;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 40px 20px;
+    animation: fadeIn 0.6s ease;
+  }
+  .slide.active { display: flex; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ---- INTRO ---- */
+  .intro-badge {
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    letter-spacing: 4px;
+    color: var(--mid-green);
+    border: 1px solid var(--mid-green);
+    padding: 6px 16px;
+    margin-bottom: 32px;
+    text-transform: uppercase;
+  }
+
+  .intro-title {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(36px, 8vw, 72px);
+    font-weight: 900;
+    line-height: 1;
+    text-align: center;
+    color: var(--green);
+    text-shadow: var(--glow);
+    margin-bottom: 8px;
+  }
+
+  .intro-sub {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(14px, 3vw, 22px);
+    color: var(--mid-green);
+    letter-spacing: 6px;
+    margin-bottom: 48px;
+  }
+
+  .intro-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    width: 100%;
+    max-width: 600px;
+    margin-bottom: 48px;
+  }
+
+  .info-chip {
+    border: 1px solid var(--border);
+    padding: 20px;
+    text-align: center;
+    background: var(--card-bg);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .info-chip::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--green);
+    box-shadow: var(--glow);
+  }
+
+  .info-chip .label {
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--mid-green);
+    margin-bottom: 8px;
+  }
+
+  .info-chip .value {
+    font-family: 'Orbitron', monospace;
+    font-size: 16px;
+    color: var(--green);
+  }
+
+  .intro-desc {
+    max-width: 560px;
+    text-align: center;
+    line-height: 1.8;
+    color: #00cc33;
+    font-size: 14px;
+    margin-bottom: 48px;
+  }
+
+  /* ---- EVENT SLIDES ---- */
+  .event-header {
+    width: 100%;
+    max-width: 700px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .event-num {
+    font-family: 'Orbitron', monospace;
+    font-size: 64px;
+    font-weight: 900;
+    color: var(--dark-green);
+    -webkit-text-stroke: 1px var(--green);
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .event-meta { flex: 1; }
+
+  .event-tag {
+    font-size: 10px;
+    letter-spacing: 4px;
+    color: var(--mid-green);
+    margin-bottom: 4px;
+  }
+
+  .event-title {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(16px, 3vw, 24px);
+    font-weight: 700;
+    color: var(--green);
+    text-shadow: var(--glow);
+  }
+
+  .card {
+    width: 100%;
+    max-width: 700px;
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    padding: 24px;
+    margin-bottom: 16px;
+    position: relative;
+  }
+
+  .card-label {
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--mid-green);
+    margin-bottom: 12px;
+  }
+
+  .card-text {
+    font-size: 14px;
+    line-height: 1.7;
+    color: #00cc33;
+  }
+
+  .decision-tag {
+    display: inline-block;
+    background: #00ff4122;
+    border: 1px solid var(--green);
+    padding: 4px 12px;
+    font-size: 13px;
+    color: var(--green);
+    margin-bottom: 8px;
+    margin-right: 8px;
+  }
+
+  .backlash-card {
+    border-color: #ff414144;
+    position: relative;
+  }
+
+  .backlash-card::before {
+    content: '';
+  }
+
+  .backlash-card .card-text { color: #ff9999; }
+
+  .satisfaction-bar {
+    margin-top: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .satisfaction-bar span {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--mid-green);
+    white-space: nowrap;
+  }
+
+  .bar-track {
+    flex: 1;
+    height: 4px;
+    background: #002200;
+    border: 1px solid #004400;
+  }
+
+  .bar-fill {
+    height: 100%;
+    background: var(--green);
+    box-shadow: var(--glow);
+    transition: width 1s ease;
+  }
+
+  .sat-pct {
+    font-family: 'Orbitron', monospace;
+    font-size: 13px;
+    color: var(--green);
+    white-space: nowrap;
+  }
+
+  /* ---- FINAL RESULT ---- */
+  .final-title {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(20px, 5vw, 40px);
+    font-weight: 900;
+    letter-spacing: 4px;
+    text-align: center;
+    margin-bottom: 8px;
+    text-shadow: var(--glow);
+  }
+
+  .final-sub {
+    font-size: 11px;
+    letter-spacing: 4px;
+    color: var(--mid-green);
+    margin-bottom: 48px;
+  }
+
+  .result-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    width: 100%;
+    max-width: 700px;
+    margin-bottom: 48px;
+  }
+
+  .result-card {
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    padding: 32px 16px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .result-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--green);
+    box-shadow: var(--glow);
+  }
+
+  .result-icon { font-size: 36px; margin-bottom: 16px; }
+
+  .result-value {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(24px, 5vw, 40px);
+    font-weight: 900;
+    margin-bottom: 8px;
+  }
+
+  .result-label {
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--mid-green);
+    text-transform: uppercase;
+  }
+
+  .infected-val { color: var(--yellow); }
+  .morale-val { color: var(--green); }
+  .collapse-val { color: var(--red); }
+
+  .verdict-box {
+    width: 100%;
+    max-width: 700px;
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    padding: 28px;
+    text-align: center;
+  }
+
+  .verdict-box p {
+    font-size: 14px;
+    line-height: 1.8;
+    color: #00cc33;
+  }
+
+  .verdict-box strong {
+    color: var(--green);
+  }
+
+  /* ---- NAV BUTTON ---- */
+  .nav-btn {
+    font-family: 'Orbitron', monospace;
+    font-size: 12px;
+    letter-spacing: 3px;
+    padding: 14px 40px;
+    background: transparent;
+    border: 1px solid var(--green);
+    color: var(--green);
+    cursor: crosshair;
+    text-transform: uppercase;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .nav-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--green);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.2s;
+  }
+
+  .nav-btn:hover::before { transform: scaleX(1); }
+  .nav-btn:hover { color: #000; box-shadow: var(--glow); }
+  .nav-btn span { position: relative; z-index: 1; }
+
+  .nav-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .back-btn {
+    border-color: #004400;
+    color: var(--mid-green);
+  }
+
+  /* progress dots */
+  .progress-dots {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 32px;
+  }
+
+  .dot {
+    width: 6px; height: 6px;
+    border: 1px solid var(--mid-green);
+    border-radius: 50%;
+    transition: all 0.3s;
+  }
+
+  .dot.active {
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    border-color: var(--green);
+  }
+
+  /* Glitch animation for title */
+  @keyframes glitch {
+    0%, 90%, 100% { transform: translate(0); text-shadow: var(--glow); }
+    92% { transform: translate(-2px, 1px); text-shadow: 2px 0 var(--red), var(--glow); }
+    94% { transform: translate(2px, -1px); text-shadow: -2px 0 #00ffff, var(--glow); }
+    96% { transform: translate(0); }
+  }
+
+  .intro-title { animation: glitch 6s infinite; }
+
+  @keyframes pulse-border {
+    0%, 100% { box-shadow: 0 0 0px var(--green); }
+    50% { box-shadow: var(--glow); }
+  }
+
+  .result-card { animation: pulse-border 3s infinite; }
+</style>
+</head>
+<body>
+
+<canvas id="matrix"></canvas>
+
+<!-- SLIDE 0: INTRO -->
+<div class="slide active" id="slide-0">
+  <div class="container" style="display:flex;flex-direction:column;align-items:center;">
+    <div class="progress-dots" id="dots-0"></div>
+    <div class="intro-badge">Harvard Simulation · 2025</div>
+    <div class="intro-title">PATIENT ZERO</div>
+    <div class="intro-sub">CRISIS REPORT</div>
+
+    <div class="intro-grid">
+      <div class="info-chip">
+        <div class="label">GOVERNMENT TYPE</div>
+        <div class="value">MONARCHY</div>
+      </div>
+      <div class="info-chip">
+        <div class="label">TOTAL EVENTS</div>
+        <div class="value">5 DECISIONS</div>
+      </div>
+      <div class="info-chip">
+        <div class="label">PATHOGEN</div>
+        <div class="value">UNKNOWN</div>
+      </div>
+      <div class="info-chip">
+        <div class="label">STAKES</div>
+        <div class="value">SOCIETAL</div>
+      </div>
+    </div>
+
+    <p class="intro-desc">
+      A deadly outbreak threatens the kingdom. As government advisors under a monarchy, our team faced five high-stakes decisions — balancing public health, economy, and trust. Every choice had a cost.
+    </p>
+
+    <button class="nav-btn" onclick="goTo(1)"><span>BEGIN DEBRIEF →</span></button>
+  </div>
+</div>
+
+<!-- SLIDE 1: EVENT 1 -->
+<div class="slide" id="slide-1">
+  <div class="container" style="display:flex;flex-direction:column;align-items:center;">
+    <div class="progress-dots" id="dots-1"></div>
+    <div class="event-header">
+      <div class="event-num">01</div>
+      <div class="event-meta">
+        <div class="event-tag">// EVENT ONE</div>
+        <div class="event-title">THE PILGRIMAGE CRISIS</div>
+      </div>
+    </div>
+
+    <div class="card" style="max-width:700px;width:100%;">
+      <div class="card-label">// DECISION TAKEN</div>
+      <div class="decision-tag">BAN THE PILGRIMAGE</div>
+      <div class="decision-tag">INCREASE POLICE PRESENCE</div>
+      <div class="card-text">Banned all pilgrimages outright to Faith Tower and enforced heavy police presence along major routes.</div>
+      <div class="satisfaction-bar">
+        <span>TEAM SAT.</span>
+        <div class="bar-track"><div class="bar-fill" style="width:75%"></div></div>
+        <span class="sat-pct">75%</span>
+      </div>
+    </div>
+
+    <div class="card backlash-card" style="max-width:700px;width:100%;">
+      <div class="card-label">// OUTCOME</div>
+      <div class="card-text">Ban mostly worked — but some pilgrims attended anyway without incident. The public now believes the government <strong style="color:#ffaaaa">overreacted</strong>. Morale declined, becoming a growing threat to the regime's stability.</div>
+    </div>
+
+    <div class="nav-row">
+      <button class="nav-btn back-btn" onclick="goTo(0)"><span>← BACK</span></button>
+      <button class="nav-btn" onclick="goTo(2)"><span>NEXT EVENT →</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 2: EVENT 2 -->
+<div class="slide" id="slide-2">
+  <div class="container" style="display:flex;flex-direction:column;align-items:center;">
+    <div class="progress-dots" id="dots-2"></div>
+    <div class="event-header">
+      <div class="event-num">02</div>
+      <div class="event-meta">
+        <div class="event-tag">// EVENT TWO</div>
+        <div class="event-title">THE DEVICE DEFECT</div>
+      </div>
+    </div>
+
+    <div class="card" style="max-width:700px;width:100%;">
+      <div class="card-label">// DECISION TAKEN</div>
+      <div class="decision-tag">KEEP DEFECT SECRET</div>
+      <div class="decision-tag">ENFORCE QUARANTINE ONLY</div>
+      <div class="card-text">Concealed the design flaw from the public. Enforced quarantine (not death) for those testing positive.</div>
+      <div class="satisfaction-bar">
+        <span>TEAM SAT.</span>
+        <div class="bar-track"><div class="bar-fill" style="width:100%"></div></div>
+        <span class="sat-pct">100%</span>
+      </div>
+    </div>
+
+    <div class="card backlash-card" style="max-width:700px;width:100%;">
+      <div class="card-label">// OUTCOME</div>
+      <div class="card-text">Economy stayed intact — but the cover-up was eventually exposed. The public learned the government <strong style="color:#ffaaaa">knew and said nothing</strong>. Public morale plummeted. Crisis of confidence ensued.</div>
+    </div>
+
+    <div class="nav-row">
+      <button class="nav-btn back-btn" onclick="goTo(1)"><span>← BACK</span></button>
+      <button class="nav-btn" onclick="goTo(3)"><span>NEXT EVENT →</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 3: EVENT 3 -->
+<div class="slide" id="slide-3">
+  <div class="container" style="display:flex;flex-direction:column;align-items:center;">
+    <div class="progress-dots" id="dots-3"></div>
+    <div class="event-header">
+      <div class="event-num">03</div>
+      <div class="event-meta">
+        <div class="event-tag">// EVENT THREE</div>
+        <div class="event-title">THE DRUG DILEMMA</div>
+      </div>
+    </div>
+
+    <div class="card" style="max-width:700px;width:100%;">
+      <div class="card-label">// DECISION TAKEN</div>
+      <div class="decision-tag">SUBSIDIZE THE DRUG</div>
+      <div class="decision-tag">INVEST IN VACCINE RESEARCH</div>
+      <div class="card-text">Made the drug accessible to lower and middle income families through government subsidies.</div>
+      <div class="satisfaction-bar">
+        <span>TEAM SAT.</span>
+        <div class="bar-track"><div class="bar-fill" style="width:100%"></div></div>
+        <span class="sat-pct">100%</span>
+      </div>
+    </div>
+
+    <div class="card backlash-card" style="max-width:700px;width:100%;">
+      <div class="card-label">// OUTCOME</div>
+      <div class="card-text">Helped morale and healthcare access — but reduced vigilance caused <strong style="color:#ffaaaa">infection rates to spike</strong>. Conspiracy theories spread about mind-control substances in the drug. Corruption allegations against officials persisted.</div>
+    </div>
+
+    <div class="nav-row">
+      <button class="nav-btn back-btn" onclick="goTo(2)"><span>← BACK</span></button>
+      <button class="nav-btn" onclick="goTo(4)"><span>NEXT EVENT →</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 4: EVENT 4 -->
+<div class="slide" id="slide-4">
+  <div class="container" style="display:flex;flex-direction:column;align-items:center;">
+    <div class="progress-dots" id="dots-4"></div>
+    <div class="event-header">
+      <div class="event-num">04</div>
+      <div class="event-meta">
+        <div class="event-tag">// EVENT FOUR</div>
+        <div class="event-title">THE ILLEGAL SOFTWARE</div>
+      </div>
+    </div>
+
+    <div class="card" style="max-width:700px;width:100%;">
+      <div class="card-label">// DECISION TAKEN</div>
+      <div class="decision-tag">RUN THE SOFTWARE</div>
+      <div class="decision-tag">ASSIGN PR TEAM</div>
+      <div class="card-text">Deployed the software knowing it was illegal. Assigned a communications team to manage public disclosure.</div>
+      <div class="satisfaction-bar">
+        <span>TEAM SAT.</span>
+        <div class="bar-track"><div class="bar-fill" style="width:100%"></div></div>
+        <span class="sat-pct">100%</span>
+      </div>
+    </div>
+
+    <div class="card backlash-card" style="max-width:700px;width:100%;">
+      <div class="card-label">// OUTCOME</div>
+      <div class="card-text">Software saved lives with better data — but despite public transparency, morale fell due to the <strong style="color:#ffaaaa">illegal activity</strong>. The government now faces potential legal proceedings after the crisis.</div>
+    </div>
+
+    <div class="nav-row">
+      <button class="nav-btn back-btn" onclick="goTo(3)"><span>← BACK</span></button>
+      <button class="nav-btn" onclick="goTo(5)"><span>NEXT EVENT →</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 5: EVENT 5 -->
+<div class="slide" id="slide-5">
+  <div class="container" style="display:flex;flex-direction:column;align-items:center;">
+    <div class="progress-dots" id="dots-5"></div>
+    <div class="event-header">
+      <div class="event-num">05</div>
+      <div class="event-meta">
+        <div class="event-tag">// EVENT FIVE</div>
+        <div class="event-title">THE MILITARY ASSAULT</div>
+      </div>
+    </div>
+
+    <div class="card" style="max-width:700px;width:100%;">
+      <div class="card-label">// DECISION TAKEN</div>
+      <div class="decision-tag">ORDER MILITARY ASSAULT</div>
+      <div class="decision-tag">2-DAY RESEARCH DELAY</div>
+      <div class="card-text">Gave the medical team two more days to research, then ordered a full military assault on the infected zone.</div>
+      <div class="satisfaction-bar">
+        <span>TEAM SAT.</span>
+        <div class="bar-track"><div class="bar-fill" style="width:90%"></div></div>
+        <span class="sat-pct">90%</span>
+      </div>
+    </div>
+
+    <div class="card backlash-card" style="max-width:700px;width:100%;">
+      <div class="card-label">// OUTCOME</div>
+      <div class="card-text">Assault succeeded but at a heavy cost — <strong style="color:#ffaaaa">higher than expected casualties</strong>, excessive city damage, most volunteers perished. Majority of the public disapproved of the results.</div>
+    </div>
+
+    <div class="nav-row">
+      <button class="nav-btn back-btn" onclick="goTo(4)"><span>← BACK</span></button>
+      <button class="nav-btn" onclick="goTo(6)"><span>FINAL RESULTS →</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 6: FINAL RESULT -->
+<div class="slide" id="slide-6">
+  <div class="container" style="display:flex;flex-direction:column;align-items:center;">
+    <div class="progress-dots" id="dots-6"></div>
+    <div class="final-title">COUNTRY RESULTS</div>
+    <div class="final-sub">// SIMULATION COMPLETE</div>
+
+    <div class="result-grid">
+      <div class="result-card">
+        <div class="result-icon">👥</div>
+        <div class="result-value infected-val">20%</div>
+        <div class="result-label">INFECTED</div>
+      </div>
+      <div class="result-card">
+        <div class="result-icon">😔</div>
+        <div class="result-value morale-val">MED</div>
+        <div class="result-label">MORALE</div>
+      </div>
+      <div class="result-card">
+        <div class="result-icon">🏙️</div>
+        <div class="result-value collapse-val">27%</div>
+        <div class="result-label">COLLAPSE RISK</div>
+      </div>
+    </div>
+
+    <div style="width:100%;max-width:700px;display:flex;flex-direction:column;gap:16px;">
+
+      <div class="card" style="border-color:#00ff4144;">
+        <div class="card-label">🏥 HEALTH OUTCOME</div>
+        <div class="card-text">
+          Only <strong>20% of population infected</strong><br>
+          Indicates strong containment decisions<br>
+          Early bans & strict enforcement worked
+        </div>
+      </div>
+
+      <div class="card" style="border-color:#00ff4144;">
+        <div class="card-label">😊 PUBLIC MORALE</div>
+        <div class="card-text">
+          <strong>Medium morale</strong><br>
+          Strict policies created fear but also security<br>
+          People felt protected but controlled
+        </div>
+      </div>
+
+      <div class="card" style="border-color:#ff414444;">
+        <div class="card-label">⚠️ STABILITY RISK</div>
+        <div class="card-text" style="color:#ff9999;">
+          <strong style="color:#ffaaaa">27% chance of societal collapse</strong><br>
+          Not critical, but significant tension present<br>
+          Ethical controversies & military actions affected unity
+        </div>
+      </div>
+
+    </div>
+
+    <div class="nav-row" style="margin-top:32px;">
+      <button class="nav-btn back-btn" onclick="goTo(5)"><span>← BACK</span></button>
+      <button class="nav-btn" onclick="goTo(0)"><span>↺ RESTART</span></button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const TOTAL = 7;
+  let current = 0;
+
+  function buildDots(slideIndex) {
+    const container = document.getElementById(`dots-${slideIndex}`);
+    if (!container) return;
+    container.innerHTML = '';
+    for (let i = 0; i < TOTAL; i++) {
+      const d = document.createElement('div');
+      d.className = 'dot' + (i === slideIndex ? ' active' : '');
+      container.appendChild(d);
+    }
+  }
+
+  function goTo(n) {
+    document.querySelectorAll('.slide').forEach(s => s.classList.remove('active'));
+    document.getElementById(`slide-${n}`).classList.add('active');
+    buildDots(n);
+    current = n;
+    window.scrollTo(0, 0);
+  }
+
+  // Init dots for all slides
+  for (let i = 0; i < TOTAL; i++) buildDots(i);
+
+  // Matrix rain
+  const canvas = document.getElementById('matrix');
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  const cols = Math.floor(canvas.width / 14);
+  const drops = Array(cols).fill(1);
+  const chars = '01ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&';
+
+  function drawMatrix() {
+    ctx.fillStyle = 'rgba(1,12,1,0.05)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#00ff41';
+    ctx.font = '12px Share Tech Mono';
+    drops.forEach((y, i) => {
+      const ch = chars[Math.floor(Math.random() * chars.length)];
+      ctx.fillText(ch, i * 14, y * 14);
+      if (y * 14 > canvas.height && Math.random() > 0.975) drops[i] = 0;
+      drops[i]++;
+    });
+  }
+
+  setInterval(drawMatrix, 50);
+
+  window.addEventListener('resize', () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  });
+</script>
+</body>
+</html>
